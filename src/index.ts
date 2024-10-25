@@ -171,11 +171,127 @@ async function mergeAudioFiles(audioFilePaths: string[]) {
     fs.unlinkSync(fileListPath);
     audioFilePaths.forEach((audioFilePath) => fs.unlinkSync(audioFilePath));
     outputFilePaths.forEach((outputFilePath) => fs.unlinkSync(outputFilePath));
-
   } catch (error) {
-    console.error('Error in merging audio files:', error);
+    console.error("Error in merging audio files:", error);
   }
 }
+
+app.post(
+  "/upload-tutorial/",
+  upload.fields([{ name: "video" }, { name: "audio" }]),
+  async (req: Request, res: Response) => {
+    console.log();
+    const userId: string = req.body.userId;
+    const timing: string = req.body.timing;
+
+    const files = req.files as {
+      video: Express.Multer.File[];
+      audio: Express.Multer.File[];
+    };
+
+    const videoFile = files.video[0];
+    const audioFile = files.audio[0];
+
+    const videoFilePath = path.join(uploadsDir, videoFile.originalname);
+    const audioFilePath = path.join(uploadsDir, audioFile.originalname);
+
+    const python = os.type() === "Linux" ? "python3" : "python";
+    const command = `${python} ./src/tut-save.py ${videoFilePath} ${audioFilePath}`;
+
+    new Promise<void>((resolve, reject) => {
+      exec(command)
+        .addListener("close", () => {
+          resolve();
+        })
+        .addListener("error", (err) => {
+          console.log("Error", err);
+          reject();
+        });
+    }).then(async () => {
+      fs.unlink(videoFilePath, (err) => {
+        if (err) console.error(`Error deleting file: ${videoFilePath}`, err);
+      });
+
+      fs.unlink(audioFilePath, (err) => {
+        if (err) console.error(`Error deleting file: ${audioFilePath}`, err);
+      });
+
+      const db = await getDatabase();
+
+      const result = await db.collection("tutorial-recordings").insertOne({
+        _id: new ObjectId(),
+        tutorId: new ObjectId(userId),
+        filePath: videoFile.originalname.replace("video-", ""),
+        timing,
+      });
+
+      res.status(200).send("Tutorial saved successfully.");
+    });
+  }
+);
+
+app.get("/tutorial-recordings/:userId", async (req, res) => {
+  const userId: ObjectId = new ObjectId(req.params.userId as string);
+
+  try {
+    const db = await getDatabase();
+
+    const results = await db
+      .collection("tutorial-recordings")
+      .find({ tutorId: userId })
+      .toArray();
+
+    if (results.length === 0) {
+      return res.json(results);
+    }
+
+    const responsePromises = results.map(async (recording) => {
+      const videoPath = path.join(uploadsDir, recording.filePath);
+      return new Promise((resolve) => {
+        fs.readFile(videoPath, (err, fileData) => {
+          if (err) {
+            console.error("File read error:", err);
+            resolve({
+              id: recording._id,
+              tutorId: recording.tutorId,
+              timing: recording.timing,
+              filePath: recording.filePath,
+              fileData: null,
+            });
+          } else {
+            resolve({
+              id: recording._id,
+              tutorId: recording.tutorId,
+              timing: recording.timing,
+              filePath: recording.filePath,
+              fileData: fileData,
+            });
+          }
+        });
+      });
+    });
+
+    const response = await Promise.all(responsePromises);
+
+    res.json(response);
+  } catch (error) {
+    console.error("Error fetching tutorial recordings:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.post("/tutorial-recordings/delete/", async (req, res) => {
+  const { filename } = req.body;
+
+  fs.unlink(path.join(uploadsDir, filename), (err) => {
+    if (err) console.error(`Error deleting file: ${filename}`, err);
+  });
+  const db = await getDatabase();
+  
+  db.collection("tutorial-recordings").deleteOne({ filePath: filename });
+  
+  res.status(200).send("Recording Deleted successfully!");
+});
 
 app.post("/uploads/", upload.any(), async (req, res) => {
   if (!req.files) {

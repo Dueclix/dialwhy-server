@@ -178,7 +178,7 @@ async function mergeAudioFiles(audioFilePaths: string[]) {
 
 app.post(
   "/upload-tutorial/",
-  upload.fields([{ name: "video" }, { name: "audio" }]),
+  upload.fields([{ name: "video" }]),
   async (req: Request, res: Response) => {
     console.log();
     const userId: string = req.body.userId;
@@ -186,47 +186,20 @@ app.post(
 
     const files = req.files as {
       video: Express.Multer.File[];
-      audio: Express.Multer.File[];
     };
 
     const videoFile = files.video[0];
-    const audioFile = files.audio[0];
 
-    const videoFilePath = path.join(uploadsDir, videoFile.originalname);
-    const audioFilePath = path.join(uploadsDir, audioFile.originalname);
+    const db = await getDatabase();
 
-    const python = os.type() === "Linux" ? "python3" : "python";
-    const command = `${python} ./src/tut-save.py ${videoFilePath} ${audioFilePath}`;
-
-    new Promise<void>((resolve, reject) => {
-      exec(command)
-        .addListener("close", () => {
-          resolve();
-        })
-        .addListener("error", (err) => {
-          console.log("Error", err);
-          reject();
-        });
-    }).then(async () => {
-      fs.unlink(videoFilePath, (err) => {
-        if (err) console.error(`Error deleting file: ${videoFilePath}`, err);
-      });
-
-      fs.unlink(audioFilePath, (err) => {
-        if (err) console.error(`Error deleting file: ${audioFilePath}`, err);
-      });
-
-      const db = await getDatabase();
-
-      const result = await db.collection("tutorial-recordings").insertOne({
-        _id: new ObjectId(),
-        tutorId: new ObjectId(userId),
-        filePath: videoFile.originalname.replace("video-", ""),
-        timing,
-      });
-
-      res.status(200).send("Tutorial saved successfully.");
+    const result = await db.collection("tutorial-recordings").insertOne({
+      _id: new ObjectId(),
+      tutorId: new ObjectId(userId),
+      filePath: videoFile.originalname,
+      timing,
     });
+
+    res.status(200).send("Tutorial saved successfully.");
   }
 );
 
@@ -287,9 +260,9 @@ app.post("/tutorial-recordings/delete/", async (req, res) => {
     if (err) console.error(`Error deleting file: ${filename}`, err);
   });
   const db = await getDatabase();
-  
+
   db.collection("tutorial-recordings").deleteOne({ filePath: filename });
-  
+
   res.status(200).send("Recording Deleted successfully!");
 });
 

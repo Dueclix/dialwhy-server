@@ -24,6 +24,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
+const tutorialsDir = path.join(__dirname, "tutorials");
+if (!fs.existsSync(tutorialsDir)) {
+  fs.mkdirSync(tutorialsDir);
+}
+
 const thumbnailsDir = path.join(__dirname, "thumbnails");
 if (!fs.existsSync(thumbnailsDir)) {
   fs.mkdirSync(thumbnailsDir);
@@ -31,10 +36,18 @@ if (!fs.existsSync(thumbnailsDir)) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, uploadsDir);
+    if (req.url.includes("upload-tutorial")) {
+      cb(null, tutorialsDir);
+    } else if (req.url.includes("uploads")) {
+      cb(null, uploadsDir);
+    }
   },
   filename: (req, file, cb) => {
-    cb(null, file.originalname);
+    if (req.url.includes("upload-tutorial")) {
+      cb(null, "tutorial-recording.webm");
+    } else if (req.url.includes("uploads")) {
+      cb(null, file.originalname);
+    }
   },
 });
 
@@ -181,15 +194,9 @@ async function mergeAudioFiles(audioFilePaths: string[]) {
   }
 }
 
-async function generateThumbnail(
-  videoFile: Express.Multer.File
-): Promise<string> {
+async function generateThumbnail(thumbnailPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const videoPath = path.join(uploadsDir, videoFile.filename);
-    const thumbnailPath = `${path.basename(
-      videoFile.originalname,
-      path.extname(videoFile.originalname)
-    )}.jpg`;
+    const videoPath = path.join(tutorialsDir, "tutorial-recording.webm");
 
     Ffmpeg(videoPath)
       .on("end", () => {
@@ -208,22 +215,21 @@ async function generateThumbnail(
   });
 }
 
-async function convertWebmToMp4(videoFile: Express.Multer.File): Promise<string> {
+async function convertWebmToMp4(outputPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const videoPath = path.join(uploadsDir, videoFile.originalname);
-    const outputPath = path.join(uploadsDir, videoFile.originalname.replace("webm", "mp4"));
+    const videoPath = path.join(tutorialsDir, "tutorial-recording.webm");
 
     Ffmpeg(videoPath)
       .output(outputPath)
-      .videoCodec('libx264')
-      .audioCodec('aac')
-      .on('end', () => {
+      .videoCodec("libx264")
+      .audioCodec("aac")
+      .on("end", () => {
         fs.unlink(videoPath, (err) => {
           if (err) console.error(`Error deleting file: ${videoPath}`, err);
         });
         resolve(outputPath);
       })
-      .on('error', (err) => {
+      .on("error", (err) => {
         reject(err);
       })
       .run();
@@ -235,27 +241,34 @@ app.post(
   upload.fields([{ name: "video" }]),
   async (req: Request, res: Response) => {
     const userId: string = req.body.userId;
-    const timing: string = req.body.timing;
 
-    const files = req.files as {
-      video: Express.Multer.File[];
-    };
+    const currentDate = new Date();
+    const formattedDate = currentDate
+      .toISOString()
+      .replace(/:/g, "-")
+      .split(".")[0]
+      .replace("T", "_");
 
-    const videoFile = files.video[0];
-    const thumbnailPath = await generateThumbnail(videoFile);
-    
+    const outputPath = path.join(
+      tutorialsDir,
+      `dialwhy-tutorial-recording_${formattedDate}.mp4`
+    );
+    const thumbnailPath = `dialwhy-tutorial-recording_${formattedDate}.jpg`;
+
+    await generateThumbnail(thumbnailPath);
+
     const db = await getDatabase();
-    
+
     await db.collection("tutorial-recordings").insertOne({
       _id: new ObjectId(),
       tutorId: new ObjectId(userId),
-      filePath: videoFile.originalname.replace("webm", "mp4"),
+      filePath: path.basename(outputPath),
       thumbnail: thumbnailPath,
-      timing,
+      timeStamp: currentDate.toISOString(),
     });
-    
+
     res.status(200).send("Tutorial saved successfully.");
-    await convertWebmToMp4(videoFile);
+    await convertWebmToMp4(outputPath);
   }
 );
 
@@ -277,16 +290,29 @@ app.get("/tutorial-recordings/:userId", async (req, res) => {
   }
 });
 
+app.get("/tutorial-recordings/download/:filename", (req, res) => {
+  const { filename } = req.params;
+  const videoPath = path.join(tutorialsDir, filename);
+  res.sendFile(videoPath, (err) => {
+    if (err) {
+      res.status(500).end();
+    }
+  });
+});
+
 app.post("/tutorial-recordings/delete/", async (req, res) => {
   const { filename } = req.body;
 
-  fs.unlink(path.join(uploadsDir, filename), (err) => {
+  fs.unlink(path.join(tutorialsDir, filename), (err) => {
     if (err) console.error(`Error deleting file: ${filename}`, err);
   });
 
-  fs.unlink(path.join(thumbnailsDir, filename.replace(".mp4", ".jpg")), (err) => {
-    if (err) console.error(`Error deleting file: ${filename}`, err);
-  });
+  fs.unlink(
+    path.join(thumbnailsDir, filename.replace(".mp4", ".jpg")),
+    (err) => {
+      if (err) console.error(`Error deleting file: ${filename}`, err);
+    }
+  );
 
   const db = await getDatabase();
 

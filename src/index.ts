@@ -24,6 +24,11 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
 }
 
+const thumbnailsDir = path.join(__dirname, "thumbnails");
+if (!fs.existsSync(thumbnailsDir)) {
+  fs.mkdirSync(thumbnailsDir);
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -176,11 +181,37 @@ async function mergeAudioFiles(audioFilePaths: string[]) {
   }
 }
 
+async function generateThumbnail(
+  videoFile: Express.Multer.File
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const videoPath = path.join(uploadsDir, videoFile.filename);
+    const thumbnailPath = `${path.basename(
+      videoFile.originalname,
+      path.extname(videoFile.originalname)
+    )}.jpg`;
+
+    Ffmpeg(videoPath)
+      .on("end", () => {
+        resolve(thumbnailPath);
+      })
+      .on("error", (err) => {
+        reject(err);
+      })
+      .screenshots({
+        count: 1,
+        folder: thumbnailsDir,
+        filename: thumbnailPath,
+        size: "320x240",
+        timemarks: ["00:00:01.000"],
+      });
+  });
+}
+
 app.post(
   "/upload-tutorial/",
   upload.fields([{ name: "video" }]),
   async (req: Request, res: Response) => {
-    console.log();
     const userId: string = req.body.userId;
     const timing: string = req.body.timing;
 
@@ -189,6 +220,7 @@ app.post(
     };
 
     const videoFile = files.video[0];
+    const thumbnailPath = await generateThumbnail(videoFile);
 
     const db = await getDatabase();
 
@@ -196,6 +228,7 @@ app.post(
       _id: new ObjectId(),
       tutorId: new ObjectId(userId),
       filePath: videoFile.originalname,
+      thumbnail: thumbnailPath,
       timing,
     });
 
@@ -214,39 +247,7 @@ app.get("/tutorial-recordings/:userId", async (req, res) => {
       .find({ tutorId: userId })
       .toArray();
 
-    if (results.length === 0) {
-      return res.json(results);
-    }
-
-    const responsePromises = results.map(async (recording) => {
-      const videoPath = path.join(uploadsDir, recording.filePath);
-      return new Promise((resolve) => {
-        fs.readFile(videoPath, (err, fileData) => {
-          if (err) {
-            console.error("File read error:", err);
-            resolve({
-              id: recording._id,
-              tutorId: recording.tutorId,
-              timing: recording.timing,
-              filePath: recording.filePath,
-              fileData: null,
-            });
-          } else {
-            resolve({
-              id: recording._id,
-              tutorId: recording.tutorId,
-              timing: recording.timing,
-              filePath: recording.filePath,
-              fileData: fileData,
-            });
-          }
-        });
-      });
-    });
-
-    const response = await Promise.all(responsePromises);
-
-    res.json(response);
+    res.json(results);
   } catch (error) {
     console.error("Error fetching tutorial recordings:", error);
     res.status(500).json({ message: "Internal server error" });
@@ -259,6 +260,11 @@ app.post("/tutorial-recordings/delete/", async (req, res) => {
   fs.unlink(path.join(uploadsDir, filename), (err) => {
     if (err) console.error(`Error deleting file: ${filename}`, err);
   });
+
+  fs.unlink(path.join(thumbnailsDir, filename.replace(".mp4", ".jpg")), (err) => {
+    if (err) console.error(`Error deleting file: ${filename}`, err);
+  });
+
   const db = await getDatabase();
 
   db.collection("tutorial-recordings").deleteOne({ filePath: filename });
@@ -352,6 +358,16 @@ app.post("/uploads/", upload.any(), async (req, res) => {
     console.error("Processing error:", error);
     res.status(500).send("Error processing files.");
   }
+});
+
+app.get("/thumbnail/:filename", (req, res) => {
+  const { filename } = req.params;
+  const imgPath = path.join(thumbnailsDir, filename);
+  res.sendFile(imgPath, (err) => {
+    if (err) {
+      res.status(500).end();
+    }
+  });
 });
 
 app.get("/recording/:filename", (req, res) => {

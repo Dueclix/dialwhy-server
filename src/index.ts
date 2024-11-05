@@ -208,6 +208,28 @@ async function generateThumbnail(
   });
 }
 
+async function convertWebmToMp4(videoFile: Express.Multer.File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const videoPath = path.join(uploadsDir, videoFile.originalname);
+    const outputPath = path.join(uploadsDir, videoFile.originalname.replace("webm", "mp4"));
+
+    Ffmpeg(videoPath)
+      .output(outputPath)
+      .videoCodec('libx264')
+      .audioCodec('aac')
+      .on('end', () => {
+        fs.unlink(videoPath, (err) => {
+          if (err) console.error(`Error deleting file: ${videoPath}`, err);
+        });
+        resolve(outputPath);
+      })
+      .on('error', (err) => {
+        reject(err);
+      })
+      .run();
+  });
+}
+
 app.post(
   "/upload-tutorial/",
   upload.fields([{ name: "video" }]),
@@ -221,18 +243,19 @@ app.post(
 
     const videoFile = files.video[0];
     const thumbnailPath = await generateThumbnail(videoFile);
-
+    
     const db = await getDatabase();
-
-    const result = await db.collection("tutorial-recordings").insertOne({
+    
+    await db.collection("tutorial-recordings").insertOne({
       _id: new ObjectId(),
       tutorId: new ObjectId(userId),
-      filePath: videoFile.originalname,
+      filePath: videoFile.originalname.replace("webm", "mp4"),
       thumbnail: thumbnailPath,
       timing,
     });
-
+    
     res.status(200).send("Tutorial saved successfully.");
+    await convertWebmToMp4(videoFile);
   }
 );
 

@@ -20,24 +20,23 @@ messagesRouter.post(
         senderId,
         receiverId,
         message,
-        timming,
         seen,
       }: {
         senderId: string;
         receiverId: string;
         message: string;
-        timming: string;
         seen: boolean;
       } = req.body;
 
       const db = await getDatabase();
 
+      const currentDate = new Date();
       const data = await db.collection("one-to-one-messages").insertOne({
         _id: new ObjectId(),
         senderId: new ObjectId(senderId),
         receiverId: new ObjectId(receiverId),
         message,
-        timming,
+        timeStamp: currentDate.toISOString(),
         seen,
         type: "message",
       });

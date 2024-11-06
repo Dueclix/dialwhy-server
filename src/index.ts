@@ -329,11 +329,11 @@ app.post("/uploads/", upload.any(), async (req, res) => {
   const {
     senderId,
     receiverId,
-    timming,
+    timeStamp,
   }: {
     senderId: string;
     receiverId: string;
-    timming: string;
+    timeStamp: string;
   } = req.body;
 
   const files = req.files as Express.Multer.File[];
@@ -386,7 +386,7 @@ app.post("/uploads/", upload.any(), async (req, res) => {
             senderId: new ObjectId(senderId),
             receiverId: new ObjectId(receiverId),
             filePath: videoPath,
-            timming,
+            timeStamp,
             seen: false,
             type: "recording",
           });

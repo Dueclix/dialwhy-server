@@ -267,8 +267,9 @@ app.post(
       timeStamp: currentDate.toISOString(),
     });
 
-    res.status(200).send("Tutorial saved successfully.");
     await convertWebmToMp4(outputPath);
+
+    res.status(200).send("Tutorial saved successfully.");
   }
 );
 

@@ -4,6 +4,7 @@ import { createServer, Server as HTTPServer } from "http";
 import ffmpegPath from "ffmpeg-static";
 import { exec } from "child_process";
 import routes from "./routes/routes";
+import { randomBytes } from "crypto";
 import Ffmpeg from "fluent-ffmpeg";
 import { ObjectId } from "mongodb";
 import { getDb } from "./db/db";
@@ -241,19 +242,16 @@ app.post(
   upload.fields([{ name: "video" }]),
   async (req: Request, res: Response) => {
     const userId: string = req.body.userId;
+    const tutName: string = req.body.tutName;
 
+    const randomId = randomBytes(12).toString("hex");
     const currentDate = new Date();
-    const formattedDate = currentDate
-      .toISOString()
-      .replace(/:/g, "-")
-      .split(".")[0]
-      .replace("T", "_");
 
     const outputPath = path.join(
       tutorialsDir,
-      `dialwhy-tutorial-recording_${formattedDate}.mp4`
+      `${randomId}.mp4`
     );
-    const thumbnailPath = `dialwhy-tutorial-recording_${formattedDate}.jpg`;
+    const thumbnailPath = `${randomId}.jpg`;
 
     await generateThumbnail(thumbnailPath);
 
@@ -261,9 +259,10 @@ app.post(
 
     await db.collection("tutorial-recordings").insertOne({
       _id: new ObjectId(),
+      tutName: tutName,
+      thumbnail: thumbnailPath,
       tutorId: new ObjectId(userId),
       filePath: path.basename(outputPath),
-      thumbnail: thumbnailPath,
       timeStamp: currentDate.toISOString(),
     });
 
@@ -299,6 +298,25 @@ app.get("/tutorial-recordings/download/:filename", (req, res) => {
       res.status(500).end();
     }
   });
+});
+
+app.post("/tutorial-recordings/edit/", async (req, res) => {
+  const { tutId, updatedName }: { tutId: string; updatedName: string } =
+    req.body;
+
+  const db = await getDatabase();
+
+  try {
+    db.collection("tutorial-recordings").updateOne(
+      {
+        _id: new ObjectId(tutId),
+      },
+      { $set: { tutName: updatedName } }
+    );
+    res.status(200).send("TutName updated successfully!");
+  } catch(err) {
+    console.log(tutId, updatedName);
+  }
 });
 
 app.post("/tutorial-recordings/delete/", async (req, res) => {

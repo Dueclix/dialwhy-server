@@ -216,22 +216,47 @@ async function generateThumbnail(thumbnailPath: string): Promise<string> {
   });
 }
 
-async function convertWebmToMp4(outputPath: string): Promise<string> {
+async function convertWebmToMp4(): Promise<string> {
   return new Promise((resolve, reject) => {
     const videoPath = path.join(tutorialsDir, "tutorial-recording.webm");
 
     Ffmpeg(videoPath)
-      .output(outputPath)
+      .output(path.join(tutorialsDir, "output.mp4"))
       .videoCodec("libx264")
       .audioCodec("aac")
       .on("end", () => {
         fs.unlink(videoPath, (err) => {
           if (err) console.error(`Error deleting file: ${videoPath}`, err);
         });
-        resolve(outputPath);
+        resolve(path.join(tutorialsDir, "output.mp4"));
       })
       .on("error", (err) => {
         reject(err);
+      })
+      .run();
+  });
+}
+
+async function EnhanceVideoQuality(outputPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const videoPath = path.join(tutorialsDir, "output.mp4");
+
+    Ffmpeg(videoPath)
+      .output(outputPath)
+      .videoBitrate("5000k")
+      .size("1920x1080")
+      .outputOptions(["-preset fast", "-crf 18", "-vf unsharp=5:5:0.7:5:5:0.0"])
+      .on("end", async () => {
+        try {
+          await fs.promises.unlink(videoPath);
+          resolve(outputPath);
+        } catch (err) {
+          console.error(`Error deleting file: ${videoPath}`, err);
+          reject(`Error deleting temporary file: ${videoPath}`);
+        }
+      })
+      .on("error", (err: Error) => {
+        reject(`Error during video conversion/enhancement: ${err.message}`);
       })
       .run();
   });
@@ -247,10 +272,7 @@ app.post(
     const randomId = randomBytes(12).toString("hex");
     const currentDate = new Date();
 
-    const outputPath = path.join(
-      tutorialsDir,
-      `${randomId}.mp4`
-    );
+    const outputPath = path.join(tutorialsDir, `${randomId}.mp4`);
     const thumbnailPath = `${randomId}.jpg`;
 
     await generateThumbnail(thumbnailPath);
@@ -266,7 +288,8 @@ app.post(
       timeStamp: currentDate.toISOString(),
     });
 
-    await convertWebmToMp4(outputPath);
+    await convertWebmToMp4();
+    await EnhanceVideoQuality(outputPath);
 
     res.status(200).send("Tutorial saved successfully.");
   }
@@ -314,7 +337,7 @@ app.post("/tutorial-recordings/edit/", async (req, res) => {
       { $set: { tutName: updatedName } }
     );
     res.status(200).send("TutName updated successfully!");
-  } catch(err) {
+  } catch (err) {
     console.log(tutId, updatedName);
   }
 });

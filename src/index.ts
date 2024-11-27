@@ -75,15 +75,9 @@ webPush.setVapidDetails(
   vapidkeys.privateKey
 );
 
+app.use(cors());
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ limit: "100mb", extended: true }));
-
-app.use(
-  cors({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  })
-);
 
 const server: HTTPServer = createServer(app);
 const io = new SocketIOServer(server, {
@@ -266,39 +260,38 @@ async function EnhanceVideoQuality(outputPath: string): Promise<string> {
 app.post(
   "/upload-tutorial/",
   upload.fields([{ name: "video" }]),
-  async (err: Error, req: Request, res: Response, next: NextFunction) => {
-    if(err) {
-      console.log(err);
-      return res.status(500).send("File upload error.");
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const userId: string = req.body.userId;
+      const tutName: string = req.body.tutName;
+
+      const randomId = randomBytes(12).toString("hex");
+      const currentDate = new Date();
+
+      const outputPath = path.join(tutorialsDir, `${randomId}.mp4`);
+      const thumbnailPath = `${randomId}.jpg`;
+
+      await generateThumbnail(thumbnailPath);
+
+      const db = await getDatabase();
+
+      await db.collection("tutorial-recordings").insertOne({
+        _id: new ObjectId(),
+        tutName: tutName,
+        thumbnail: thumbnailPath,
+        tutorId: new ObjectId(userId),
+        filePath: path.basename(outputPath),
+        timeStamp: currentDate.toISOString(),
+      });
+
+      await convertWebmToMp4();
+      await EnhanceVideoQuality(outputPath);
+
+      res.status(200).send("Tutorial saved successfully.");
+    } catch (err) {
+      console.error(err);
+      next(err);
     }
-
-    const userId: string = req.body.userId;
-    const tutName: string = req.body.tutName;
-
-    const randomId = randomBytes(12).toString("hex");
-    const currentDate = new Date();
-
-    const outputPath = path.join(tutorialsDir, `${randomId}.mp4`);
-    const thumbnailPath = `${randomId}.jpg`;
-
-    await generateThumbnail(thumbnailPath);
-
-    const db = await getDatabase();
-
-    await db.collection("tutorial-recordings").insertOne({
-      _id: new ObjectId(),
-      tutName: tutName,
-      thumbnail: thumbnailPath,
-      tutorId: new ObjectId(userId),
-      filePath: path.basename(outputPath),
-      timeStamp: currentDate.toISOString(),
-    });
-
-    await convertWebmToMp4();
-    await EnhanceVideoQuality(outputPath);
-
-    res.status(200).send("Tutorial saved successfully.");
-    next();
   }
 );
 

@@ -1,4 +1,4 @@
-import express, { Application, Request, Response } from "express";
+import express, { Application, NextFunction, Request, Response } from "express";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { createServer, Server as HTTPServer } from "http";
 import ffmpegPath from "ffmpeg-static";
@@ -75,8 +75,9 @@ webPush.setVapidDetails(
   vapidkeys.privateKey
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ limit: "100mb", extended: true }));
+
 app.use(
   cors({
     origin: "*",
@@ -265,7 +266,12 @@ async function EnhanceVideoQuality(outputPath: string): Promise<string> {
 app.post(
   "/upload-tutorial/",
   upload.fields([{ name: "video" }]),
-  async (req: Request, res: Response) => {
+  async (err: Error, req: Request, res: Response, next: NextFunction) => {
+    if(err) {
+      console.log(err);
+      return res.status(500).send("File upload error.");
+    }
+
     const userId: string = req.body.userId;
     const tutName: string = req.body.tutName;
 
@@ -292,6 +298,7 @@ app.post(
     await EnhanceVideoQuality(outputPath);
 
     res.status(200).send("Tutorial saved successfully.");
+    next();
   }
 );
 

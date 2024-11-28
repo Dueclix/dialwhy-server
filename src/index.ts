@@ -217,19 +217,21 @@ async function generateThumbnail(thumbnailPath: string): Promise<string> {
   });
 }
 
-async function convertWebmToMp4(): Promise<string> {
+async function convertWebmToMp4(outputPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const videoPath = path.join(tutorialsDir, "tutorial-recording.webm");
 
     Ffmpeg(videoPath)
-      .output(path.join(tutorialsDir, "output.mp4"))
+      .output(outputPath)
+      // .output(path.join(tutorialsDir, "output.mp4"))
       .videoCodec("libx264")
       .audioCodec("aac")
       .on("end", () => {
         fs.unlink(videoPath, (err) => {
           if (err) console.error(`Error deleting file: ${videoPath}`, err);
         });
-        resolve(path.join(tutorialsDir, "output.mp4"));
+        resolve(outputPath);
+        // resolve(path.join(tutorialsDir, "output.mp4"));
       })
       .on("error", (err) => {
         reject(err);
@@ -238,30 +240,30 @@ async function convertWebmToMp4(): Promise<string> {
   });
 }
 
-async function EnhanceVideoQuality(outputPath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const videoPath = path.join(tutorialsDir, "output.mp4");
+// async function EnhanceVideoQuality(outputPath: string): Promise<string> {
+//   return new Promise((resolve, reject) => {
+//     const videoPath = path.join(tutorialsDir, "output.mp4");
 
-    Ffmpeg(videoPath)
-      .output(outputPath)
-      .videoBitrate("5000k")
-      .size("1920x1080")
-      .outputOptions(["-preset fast", "-crf 18", "-vf unsharp=5:5:0.7:5:5:0.0"])
-      .on("end", async () => {
-        try {
-          await fs.promises.unlink(videoPath);
-          resolve(outputPath);
-        } catch (err) {
-          console.error(`Error deleting file: ${videoPath}`, err);
-          reject(`Error deleting temporary file: ${videoPath}`);
-        }
-      })
-      .on("error", (err: Error) => {
-        reject(`Error during video conversion/enhancement: ${err.message}`);
-      })
-      .run();
-  });
-}
+//     Ffmpeg(videoPath)
+//       .output(outputPath)
+//       .videoBitrate("5000k")
+//       .size("1920x1080")
+//       .outputOptions(["-preset fast", "-crf 18", "-vf unsharp=5:5:0.7:5:5:0.0"])
+//       .on("end", async () => {
+//         try {
+//           await fs.promises.unlink(videoPath);
+//           resolve(outputPath);
+//         } catch (err) {
+//           console.error(`Error deleting file: ${videoPath}`, err);
+//           reject(`Error deleting temporary file: ${videoPath}`);
+//         }
+//       })
+//       .on("error", (err: Error) => {
+//         reject(`Error during video conversion/enhancement: ${err.message}`);
+//       })
+//       .run();
+//   });
+// }
 
 app.post(
   "/upload-tutorial/",
@@ -290,8 +292,8 @@ app.post(
         timeStamp: currentDate.toISOString(),
       });
 
-      await convertWebmToMp4();
-      await EnhanceVideoQuality(outputPath);
+      await convertWebmToMp4(outputPath);
+      // await EnhanceVideoQuality(outputPath);
 
       res.status(200).send("Tutorial saved successfully.");
     } catch (err) {

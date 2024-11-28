@@ -219,19 +219,19 @@ async function generateThumbnail(thumbnailPath: string): Promise<string> {
   });
 }
 
-async function convertWebmToMp4(): Promise<string> {
+async function convertWebmToMp4(outputPath: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const videoPath = path.join(tutorialsDir, "tutorial-recording.webm");
 
     Ffmpeg(videoPath)
-      .output(path.join(tutorialsDir, "output.mp4"))
+      .output(outputPath)
       .videoCodec("libx264")
       .audioCodec("aac")
       .on("end", () => {
         fs.unlink(videoPath, (err) => {
           if (err) console.error(`Error deleting file: ${videoPath}`, err);
         });
-        resolve(path.join(tutorialsDir, "output.mp4"));
+        resolve(outputPath);
       })
       .on("error", (err) => {
         reject(err);
@@ -277,23 +277,23 @@ app.post(
       const currentDate = new Date();
 
       const outputPath = path.join(tutorialsDir, `${randomId}.mp4`);
-      const thumbnailPath = `${randomId}.jpg`;
+      // const thumbnailPath = `${randomId}.jpg`;
 
-      await generateThumbnail(thumbnailPath);
+      // await generateThumbnail(thumbnailPath);
 
       const db = await getDatabase();
 
       await db.collection("tutorial-recordings").insertOne({
         _id: new ObjectId(),
         tutName: tutName,
-        thumbnail: thumbnailPath,
+        // thumbnail: thumbnailPath,
         tutorId: new ObjectId(userId),
         filePath: path.basename(outputPath),
         timeStamp: currentDate.toISOString(),
       });
 
-      await convertWebmToMp4();
-      await EnhanceVideoQuality(outputPath);
+      await convertWebmToMp4(outputPath);
+      // await EnhanceVideoQuality(outputPath);
 
       res.status(200).send("Tutorial saved successfully.");
     } catch (err) {

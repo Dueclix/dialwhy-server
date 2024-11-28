@@ -80,10 +80,8 @@ app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
 app.use(
   cors({
-    origin: "https://dialwhy.com",
+    origin: "*",
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
   })
 );
 
@@ -270,30 +268,30 @@ app.post(
   upload.fields([{ name: "video" }]),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      // const userId: string = req.body.userId;
-      // const tutName: string = req.body.tutName;
+      const userId: string = req.body.userId;
+      const tutName: string = req.body.tutName;
 
-      // const randomId = randomBytes(12).toString("hex");
-      // const currentDate = new Date();
+      const randomId = randomBytes(12).toString("hex");
+      const currentDate = new Date();
 
-      // const outputPath = path.join(tutorialsDir, `${randomId}.mp4`);
-      // const thumbnailPath = `${randomId}.jpg`;
+      const outputPath = path.join(tutorialsDir, `${randomId}.mp4`);
+      const thumbnailPath = `${randomId}.jpg`;
 
-      // await generateThumbnail(thumbnailPath);
+      await generateThumbnail(thumbnailPath);
 
-      // const db = await getDatabase();
+      const db = await getDatabase();
 
-      // await db.collection("tutorial-recordings").insertOne({
-      //   _id: new ObjectId(),
-      //   tutName: tutName,
-      //   thumbnail: thumbnailPath,
-      //   tutorId: new ObjectId(userId),
-      //   filePath: path.basename(outputPath),
-      //   timeStamp: currentDate.toISOString(),
-      // });
+      await db.collection("tutorial-recordings").insertOne({
+        _id: new ObjectId(),
+        tutName: tutName,
+        thumbnail: thumbnailPath,
+        tutorId: new ObjectId(userId),
+        filePath: path.basename(outputPath),
+        timeStamp: currentDate.toISOString(),
+      });
 
-      // await convertWebmToMp4();
-      // await EnhanceVideoQuality(outputPath);
+      await convertWebmToMp4();
+      await EnhanceVideoQuality(outputPath);
 
       res.status(200).send("Tutorial saved successfully.");
     } catch (err) {
@@ -493,6 +491,9 @@ app.post("/recording/delete/", async (req, res) => {
 });
 
 const PORT: string | number = process.env.PORT || 5000;
+
+server.setTimeout(0);
+server.timeout = 0;
 server.listen(PORT, (): void => {
   console.log(`Server running at http://localhost:${PORT}/`);
 });
